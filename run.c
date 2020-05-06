@@ -9,29 +9,40 @@
 #define ANALYSIS 1
 #define DEBUG 0
 #define SINGLE_RUN 0
+
+double avg_mutual_info_at_end = 0;
+int total_runs = 0;
+int failed_runs = 0;
+double total_steps = 0;
+int total_decrease_in_mutual_info = 0;
+int decrease_in_mutual_info_good = 0;
+int decrease_in_mutual_info_bad = 0;
+
+FILE *fp;
+
 /*
 prints the observation table with row and column headers
 blank spaces are "-1" i.e. unassigned
 */
 int print_observation_table(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1]){
-    printf("   ");
+    fprintf(fp, "   ");
     for (int i = 0; i <= TABLE_MAX; i++){
-        printf("%2i ", i);
+        fprintf(fp, "%2i ", i);
     }
-    printf("\n");
+    fprintf(fp, "\n");
     for (int i = 0; i <= TABLE_MAX; i++){
-        printf("%2i ", i);
+        fprintf(fp, "%2i ", i);
         for(int j = 0; j < TABLE_MAX; j++){
             if(observation_table[i][j] == -1){
-                printf("   ");
+                fprintf(fp, "   ");
             }
             else{
-                printf("%2i ", observation_table[i][j]);
+                fprintf(fp, "%2i ", observation_table[i][j]);
             }
         }
-        printf("\n");
+        fprintf(fp, "\n");
     }
-    printf("\n");
+    fprintf(fp, "\n");
     return 0;
 }
 
@@ -39,14 +50,11 @@ int print_observation_table(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1])
 calculates(arg)log2(arg) returns 0 if arg = 0;
 */ 
 double mutual_info_log(double arg){
-    //printf("mutual info log of %f = ", arg);
     if(arg == 0){
-        //printf("0\n");
         return 0.0;
     }
     else{
         double result = arg * log2l(arg);
-        //printf("%f\n", result);
         return result;
     }
 }
@@ -60,11 +68,7 @@ d = false negative probability
 mutual_info = 
 -(b+c)log2(b+c) - (a+d)log2(a+d) - (a+b)log2(a+b) - (c+d)log2(c+d) + alog2a + blog2b + clog2c + dlog2d
 */
-double mutual_info(double true_negative, double false_positive, double true_positive, double false_negative, double total){
-    double a = true_negative/total;
-    double b = false_positive/total;
-    double c = true_positive/total;
-    double d = false_negative/total;
+double mutual_info(double a, double b, double c, double d){
     double result = (0 - mutual_info_log(b+c) - mutual_info_log(a+d) - mutual_info_log(a+b) - mutual_info_log(c+d)
      + mutual_info_log(a) + mutual_info_log(b) + mutual_info_log(c) + mutual_info_log(d));
     return result;
@@ -75,8 +79,6 @@ The table is considered closed if every row in S.A, there is a identical row in 
 */
 int closed(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int current_max_row, int current_max_col){
     //check whether each row in S is identical to the row in S.A
-    // printf("current_max_row = %d\n", current_max_row);
-    // printf("current_max_col = %d\n", current_max_col);
     for (int i = 0; i <= current_max_row; i++){
         int flag = 0;
         for(int j = 0; j <= current_max_col; j++){
@@ -133,7 +135,7 @@ strings longer than MAX_LENGTH are rejected by default.
 returns 1 if string is accepted, 0 if not.
 */
 int membership_query(int* teacher, int query, int length){
-    if(query > length){
+    if(query > length - 1){
         return 0;
     }
     else{
@@ -147,29 +149,29 @@ counts number of true positive, false positive, true negative and false positive
 returns 0 if it matches, returns a counterexample if it does not. 
 counterexample can never be 0 since it is always queried at the beginning of the algorithm
 */
-int check_equivalence(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int current_max_row, int current_max_col, int teacher[MAX_LENGTH + 1], double* mutual_information){
+int check_equivalence(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int current_max_row, int current_max_col, int teacher[MAX_LENGTH + 1], double* mutual_information, double* oracle){
     int table_row = 0;
     int false_positive = 0;
     int false_negative = 0;
     int true_positive = 0;
     int true_negative = 0;
     int counterexample = 0;
-    printf("LEARNER ACCEPTS: ");
-    for (int i = 0; i <= MAX_LENGTH; i++){
-        // printf("table row = %i\n", table_row);
-        if(observation_table[table_row][0] == teacher[i]){
-            if(teacher[i] == 0){
+    fprintf(fp, "LEARNER ACCEPTS: ");
+    for (int i = 0; i <= TABLE_MAX; i++){
+        int teacher_value = membership_query(teacher, i, MAX_LENGTH + 1);
+        if(observation_table[table_row][0] == teacher_value){
+            if(teacher_value == 0){
                 true_negative++;
             }
             else{
                 true_positive++;
-                printf("%2i ", i);
+                fprintf(fp, "%2i ", i);
             }
         }
         else{
-            if(teacher[i] == 0){
+            if(teacher_value == 0){
                 false_positive++;
-                printf("%2i ", i);
+                fprintf(fp, "%2i ", i);
                 if(counterexample == 0){
                     counterexample = i;
                 }
@@ -200,28 +202,50 @@ int check_equivalence(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int c
             table_row++;
         }
     }
-    printf("\n");
+    fprintf(fp, "\n");
+
+    double a = (double)true_negative/(TABLE_MAX + 1);
+    double b = (double)false_positive/(TABLE_MAX + 1);
+    double c = (double)true_positive/(TABLE_MAX + 1);
+    double d = (double)false_negative/(TABLE_MAX + 1);
 
     #if ANALYSIS
-        printf("TRUE POSITIVE: %2i/%2i\n", true_positive, MAX_LENGTH+1);
-        printf("FALSE POSITIVE: %2i/%2i\n", false_positive, MAX_LENGTH+1);
-        printf("TRUE NEGATIVE: %2i/%2i\n", true_negative, MAX_LENGTH+1);
-        printf("FALSE NEGATIVE: %2i/%2i\n", false_negative, MAX_LENGTH+1);
+        fprintf(fp, "TRUE NEGATIVE: %2i/%2i a = %f\n", true_negative, TABLE_MAX + 1, a);
+        fprintf(fp, "FALSE POSITIVE: %2i/%2i b = %f\n", false_positive, TABLE_MAX + 1, b);
+        fprintf(fp, "TRUE POSITIVE: %2i/%2i c = %f\n", true_positive, TABLE_MAX + 1, c);
+        fprintf(fp, "FALSE NEGATIVE: %2i/%2i d = %f\n", false_negative, TABLE_MAX + 1, d);
     #endif
     
     double new_mutual_information = 
-        mutual_info(true_negative, false_positive, true_positive, false_negative, MAX_LENGTH + 1);
-    printf("MUTUAL INFO = %f\n", new_mutual_information);
-    printf("CHANGE IN MUTUAL INFO = %f\n", new_mutual_information - *mutual_information);
+        mutual_info(a, b, c, d);
+    double new_oracle = (b*d) - (a*c);
+    fprintf(fp, "MUTUAL INFO = %f\n", new_mutual_information);
+    fprintf(fp, "CHANGE IN MUTUAL INFO = %f\n", new_mutual_information - *mutual_information);
+    if(new_mutual_information - *mutual_information < -0.000001){
+        total_decrease_in_mutual_info++;
+        if(*oracle <= 0){
+            decrease_in_mutual_info_good++;
+            #if ANALYSIS
+                fprintf(fp, "DECREASE IN MUTUAL INFO WITH GOOD ORACLE\n");
+            #endif
+        }
+        else{
+            decrease_in_mutual_info_bad++;
+            #if ANALYSIS
+                fprintf(fp, "DECREASE IN MUTUAL INFO WITH BAD ORACLE\n");
+            #endif
+        }
+    }
     *mutual_information = new_mutual_information;
-    printf("bd-ac = %f\n", 
-        (double)((false_positive * false_negative) - (true_negative * true_positive))/(MAX_LENGTH + 1));
+    fprintf(fp, "bd-ac = %f\n", 
+        new_oracle);
+    *oracle = new_oracle;
     if(false_positive == 0 && false_negative == 0){
         return 0;
     }
     else{
         #if ANALYSIS
-            printf("COUNTEREXAMPLE = %2i\n", counterexample);
+            fprintf(fp, "COUNTEREXAMPLE = %2i\n", counterexample);
         #endif
 
         return counterexample;
@@ -229,13 +253,14 @@ int check_equivalence(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int c
 }
 
 void lstar(int* array, int length){
-    printf("TEACHER ACCEPTS: ");
+    total_runs++;
+    fprintf(fp, "TEACHER ACCEPTS: ");
     for(int i = 0; i < length; i++){
         if(array[i] == 1){
-            printf("%2d ", i);
+            fprintf(fp, "%2d ", i);
         }
     }
-    printf("\n");
+    fprintf(fp, "\n");
     
     /*
     initialisation of observation table. 
@@ -260,6 +285,7 @@ void lstar(int* array, int length){
 
     //main loop
     double mutual_information = 0.0;
+    double oracle = 0.0;
     int matched_teacher= 0;
     while(!matched_teacher){
         int consistent_flag = consistent(observation_table, current_max_row, current_max_col);
@@ -268,12 +294,12 @@ void lstar(int* array, int length){
             consistent_flag = 0;
             closed_flag = 0;
             if(!consistent(observation_table, current_max_row, current_max_col)){
-                // printf("NOT CONSISTENT\n");
                 if(current_max_col < TABLE_MAX){
                     current_max_col++;
                 }
                 else{
-                    printf("\n***\nEXCEEDED MAX COLUMNS\n***\n");
+                    fprintf(fp, "\n***\nEXCEEDED MAX COLUMNS\n***\n");
+                    failed_runs++;
                     return;
                 }
                 for(int i=0; i <= current_max_row + 1; i++){
@@ -287,15 +313,14 @@ void lstar(int* array, int length){
                 consistent_flag = 1;
             }
             if(!closed(observation_table, current_max_row, current_max_col)){
-                // printf("NOT CLOSED\n");
                 if(current_max_row < TABLE_MAX){
                     current_max_row++;
                 }
                 else{
-                    printf("\n***\nEXCEEDED MAX ROWS\n***\n");
+                    fprintf(fp, "\n***\nEXCEEDED MAX ROWS\n***\n");
+                    failed_runs++;
                     return;
                 }
-                // printf("current_max_row = %d\n", current_max_row);
                 for(int j = 0; j<= current_max_col; j++){
                     observation_table[current_max_row + 1][j] = membership_query(array, current_max_row + 1 + j, length);
                 }
@@ -310,21 +335,20 @@ void lstar(int* array, int length){
         #if DEBUG
             print_observation_table(observation_table);
         #endif
-        int counterexample = check_equivalence(observation_table, current_max_row, current_max_col, array, &mutual_information);
+        total_steps++;
+        int counterexample = check_equivalence(observation_table, current_max_row, current_max_col, array, &mutual_information, &oracle);
         if(counterexample == 0){
             matched_teacher = 1;
-            // printf("MATCHED TEACHER\n");
             // #if ANALYSIS
             //     print_observation_table(observation_table);
             // #endif
         }
         else{
-            // printf("DID NOT MATCH TEACHER\n");
-            if(counterexample < MAX_LENGTH - 1){
+            if(counterexample < TABLE_MAX){
                 current_max_row = counterexample;
             }
             else{
-                current_max_row = MAX_LENGTH - 1;
+                current_max_row = TABLE_MAX - 1;
             }
             for(int i = 0; i <= current_max_row + 1; i++){
                 for(int j = 0; j <= current_max_col; j++){
@@ -337,7 +361,8 @@ void lstar(int* array, int length){
         }
 
     }
-    printf("\n");
+    avg_mutual_info_at_end += mutual_information;
+    fprintf(fp, "\n");
 }
 
 void tryAllSets(int* array, int index, int length){
@@ -362,13 +387,15 @@ int main(void){
     0 for strings not in language
     1 for strings in language.
     */
+
+    fp = fopen("analysis.txt", "w+");
     int* teacher;
     teacher = (int *)malloc((MAX_LENGTH + 1) * sizeof(int));
     
     /*
     use this if you want to try all possible sets
     */
-    #if !SINGLE_RUN
+    #if !(SINGLE_RUN)
         tryAllSets(teacher, 0, MAX_LENGTH + 1);
     #endif
     
@@ -383,29 +410,35 @@ int main(void){
         teacher[0] = 0;
         teacher[1] = 1;
         teacher[2] = 0;
-        teacher[3] = 0;
+        teacher[3] = 1;
         teacher[4] = 0;
         teacher[5] = 0;
         teacher[6] = 0;
         teacher[7] = 0;
         teacher[8] = 1;
         teacher[9] = 1;
-        teacher[10] = 0;
-        teacher[11] = 1;
-        teacher[12] = 1;
-        teacher[13] = 1;
-        teacher[14] = 1;
-        teacher[15] = 1;
-        teacher[16] = 1;
-        teacher[17] = 1;
-        teacher[18] = 0;
-        teacher[19] = 1;
-        teacher[20] = 0;
+        teacher[10] = 1;
+        // teacher[11] = 1;
+        // teacher[12] = 1;
+        // teacher[13] = 1;
+        // teacher[14] = 1;
+        // teacher[15] = 1;
+        // teacher[16] = 1;
+        // teacher[17] = 1;
+        // teacher[18] = 0;
+        // teacher[19] = 1;
+        // teacher[20] = 0;
         
         lstar(teacher, MAX_LENGTH + 1);
     #endif
 
-
+    printf("Total Runs = %d\n", total_runs);
+    printf("Failed Runs = %d\n", failed_runs);
+    printf("Average Mutual Information at Termination = %f\n", avg_mutual_info_at_end/total_runs);
+    printf("Average Number of Steps = %f\n", total_steps/total_runs);
+    printf("Number of Steps with Decrease in Mutual Info = %d\n", total_decrease_in_mutual_info);
+    printf("Number of Steps with Decrease in Mutual Info & Good Oracle = %d\n",decrease_in_mutual_info_good);
+    printf("Number of Steps with Decrease in Mutual Info & Bad Oracle = %d\n", decrease_in_mutual_info_bad);
     free(teacher);
     return 0;
 }
