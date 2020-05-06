@@ -7,7 +7,7 @@
 #define TABLE_MAX (MAX_LENGTH + TABLE_OVERFLOW)
 
 #define ANALYSIS 1
-#define DEBUG 0
+#define DEBUG 1
 #define SINGLE_RUN 0
 
 double avg_mutual_info_at_end = 0;
@@ -294,10 +294,8 @@ void lstar(int* array, int length){
             consistent_flag = 0;
             closed_flag = 0;
             if(!consistent(observation_table, current_max_row, current_max_col)){
-                if(current_max_col < TABLE_MAX){
-                    current_max_col++;
-                }
-                else{
+                current_max_col++;
+                if(current_max_col > TABLE_MAX){
                     fprintf(fp, "\n***\nEXCEEDED MAX COLUMNS\n***\n");
                     failed_runs++;
                     return;
@@ -313,10 +311,8 @@ void lstar(int* array, int length){
                 consistent_flag = 1;
             }
             if(!closed(observation_table, current_max_row, current_max_col)){
-                if(current_max_row < TABLE_MAX){
-                    current_max_row++;
-                }
-                else{
+                current_max_row++;
+                if(current_max_row >= TABLE_MAX){
                     fprintf(fp, "\n***\nEXCEEDED MAX ROWS\n***\n");
                     failed_runs++;
                     return;
@@ -440,5 +436,6 @@ int main(void){
     printf("Number of Steps with Decrease in Mutual Info & Good Oracle = %d\n",decrease_in_mutual_info_good);
     printf("Number of Steps with Decrease in Mutual Info & Bad Oracle = %d\n", decrease_in_mutual_info_bad);
     free(teacher);
+    fclose(fp);
     return 0;
 }
