@@ -7,16 +7,19 @@
 #define TABLE_MAX (MAX_LENGTH + TABLE_OVERFLOW)
 
 #define ANALYSIS 1
-#define DEBUG 1
+#define DEBUG 0
 #define SINGLE_RUN 0
 
 double avg_mutual_info_at_end = 0;
 int total_runs = 0;
 int failed_runs = 0;
-double total_steps = 0;
+int total_steps = 0;
 int total_decrease_in_mutual_info = 0;
 int decrease_in_mutual_info_good = 0;
 int decrease_in_mutual_info_bad = 0;
+int good_oracles = 0;
+int bad_oracles = 0;
+int steps_with_increase_in_fp_and_fn = 0;
 
 FILE *fp;
 
@@ -149,7 +152,7 @@ counts number of true positive, false positive, true negative and false positive
 returns 0 if it matches, returns a counterexample if it does not. 
 counterexample can never be 0 since it is always queried at the beginning of the algorithm
 */
-int check_equivalence(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int current_max_row, int current_max_col, int teacher[MAX_LENGTH + 1], double* mutual_information, double* oracle){
+int check_equivalence(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int current_max_row, int current_max_col, int teacher[MAX_LENGTH + 1], double* mutual_information, double* oracle, int* old_false_positives,  int* old_false_negatives){
     int table_row = 0;
     int false_positive = 0;
     int false_negative = 0;
@@ -215,15 +218,28 @@ int check_equivalence(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int c
         fprintf(fp, "TRUE POSITIVE: %2i/%2i c = %f\n", true_positive, TABLE_MAX + 1, c);
         fprintf(fp, "FALSE NEGATIVE: %2i/%2i d = %f\n", false_negative, TABLE_MAX + 1, d);
     #endif
+    if(*old_false_positives > false_positive && *old_false_negatives > false_negative){
+        steps_with_increase_in_fp_and_fn++;
+        #if ANALYSIS
+            fprintf(fp, "BOTH FALSE POSITIVES AND NEGATIVES INCREASED FROM PREVIOUS STEP\n");
+        #endif
+    }
+
     
     double new_mutual_information = 
         mutual_info(a, b, c, d);
     double new_oracle = (b*d) - (a*c);
     fprintf(fp, "MUTUAL INFO = %f\n", new_mutual_information);
     fprintf(fp, "CHANGE IN MUTUAL INFO = %f\n", new_mutual_information - *mutual_information);
+    if(*oracle >= 0){
+        bad_oracles++;
+    }
+    else if(*oracle < 0){
+        good_oracles++;
+    }
     if(new_mutual_information - *mutual_information < -0.000001){
         total_decrease_in_mutual_info++;
-        if(*oracle <= 0){
+        if(*oracle < 0){
             decrease_in_mutual_info_good++;
             #if ANALYSIS
                 fprintf(fp, "DECREASE IN MUTUAL INFO WITH GOOD ORACLE\n");
@@ -286,6 +302,9 @@ void lstar(int* array, int length){
     //main loop
     double mutual_information = 0.0;
     double oracle = 0.0;
+    int old_false_positives = 0;
+    int old_false_negatives = 0;
+
     int matched_teacher= 0;
     while(!matched_teacher){
         int consistent_flag = consistent(observation_table, current_max_row, current_max_col);
@@ -332,7 +351,7 @@ void lstar(int* array, int length){
             print_observation_table(observation_table);
         #endif
         total_steps++;
-        int counterexample = check_equivalence(observation_table, current_max_row, current_max_col, array, &mutual_information, &oracle);
+        int counterexample = check_equivalence(observation_table, current_max_row, current_max_col, array, &mutual_information, &oracle, &old_false_positives, &old_false_negatives);
         if(counterexample == 0){
             matched_teacher = 1;
             // #if ANALYSIS
@@ -403,16 +422,16 @@ int main(void){
         for(int i = 0; i < MAX_LENGTH + 1; i++){
             teacher[i] = 0;
         }
-        teacher[0] = 0;
-        teacher[1] = 1;
+        teacher[0] = 1;
+        teacher[1] = 0;
         teacher[2] = 0;
         teacher[3] = 1;
         teacher[4] = 0;
         teacher[5] = 0;
         teacher[6] = 0;
-        teacher[7] = 0;
-        teacher[8] = 1;
-        teacher[9] = 1;
+        teacher[7] = 1;
+        teacher[8] = 0;
+        teacher[9] = 0;
         teacher[10] = 1;
         // teacher[11] = 1;
         // teacher[12] = 1;
@@ -431,10 +450,14 @@ int main(void){
     printf("Total Runs = %d\n", total_runs);
     printf("Failed Runs = %d\n", failed_runs);
     printf("Average Mutual Information at Termination = %f\n", avg_mutual_info_at_end/total_runs);
-    printf("Average Number of Steps = %f\n", total_steps/total_runs);
+    printf("Total Number of Steps = %d\n", total_steps);
+    printf("Average Number of Steps = %f\n", (double)total_steps/total_runs);
+    printf("Number of Steps with Good Oracle = %d\n", good_oracles);
+    printf("Number of Steps with Bad Oracle = %d\n", bad_oracles - total_runs); //we need to exclude the initial steps
     printf("Number of Steps with Decrease in Mutual Info = %d\n", total_decrease_in_mutual_info);
     printf("Number of Steps with Decrease in Mutual Info & Good Oracle = %d\n",decrease_in_mutual_info_good);
     printf("Number of Steps with Decrease in Mutual Info & Bad Oracle = %d\n", decrease_in_mutual_info_bad);
+    printf("Number of Steps with Increase in Both False Positives and False Negatives = %d\n", steps_with_increase_in_fp_and_fn);
     free(teacher);
     fclose(fp);
     return 0;
