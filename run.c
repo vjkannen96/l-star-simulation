@@ -3,14 +3,13 @@
 #include <math.h>
 
 #define MAX_LENGTH 10
-#define TABLE_OVERFLOW 10
+#define TABLE_OVERFLOW (MAX_LENGTH + 1) //TABLE_OVERFLOW must be this value to detect all FP and FN.
 #define TABLE_MAX (MAX_LENGTH + TABLE_OVERFLOW)
 
-#define ANALYSIS 1
+#define ANALYSIS 0
 #define DEBUG 0
 #define SINGLE_RUN 0
 
-double avg_mutual_info_at_end = 0;
 int total_runs = 0;
 int failed_runs = 0;
 int total_steps = 0;
@@ -94,7 +93,7 @@ int closed(int observation_table[TABLE_MAX + 1][TABLE_MAX + 1], int current_max_
             return 1;
         }
     }
-    //else return true
+    //else return false
     return 0;
 }
 
@@ -376,7 +375,6 @@ void lstar(int* array, int length){
         }
 
     }
-    avg_mutual_info_at_end += mutual_information;
     fprintf(fp, "\n");
 }
 
@@ -433,23 +431,12 @@ int main(void){
         teacher[8] = 0;
         teacher[9] = 0;
         teacher[10] = 1;
-        // teacher[11] = 1;
-        // teacher[12] = 1;
-        // teacher[13] = 1;
-        // teacher[14] = 1;
-        // teacher[15] = 1;
-        // teacher[16] = 1;
-        // teacher[17] = 1;
-        // teacher[18] = 0;
-        // teacher[19] = 1;
-        // teacher[20] = 0;
         
         lstar(teacher, MAX_LENGTH + 1);
     #endif
 
     printf("Total Runs = %d\n", total_runs);
     printf("Failed Runs = %d\n", failed_runs);
-    printf("Average Mutual Information at Termination = %f\n", avg_mutual_info_at_end/total_runs);
     printf("Total Number of Steps = %d\n", total_steps);
     printf("Average Number of Steps = %f\n", (double)total_steps/total_runs);
     printf("Number of Steps with Good Oracle = %d\n", good_oracles);
